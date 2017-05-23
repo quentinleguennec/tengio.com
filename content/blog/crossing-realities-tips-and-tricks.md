@@ -20,9 +20,11 @@ This section is not a tutorial, but it contains useful information and tools I b
 
 ### Content
 1. [Ghosthands: an Input Module for Oculus Touch in Unity](#ghosthands-an-input-module-for-oculus-touch-in-unity)
-2. Daydream swipe detector (Coming Soon!)
+2. [Scene transition in Unity for VR: preserve head-tracking](#scene-transition-in-unity-for-vr-preserve-head-tracking)
+  1. [Fade Effect](#fade-effect)
+  2. [Scene Loader](#scene-loader)
 
-## Ghosthands: an Input Module for Oculus Touch in Unity
+# Ghosthands: an Input Module for Oculus Touch in Unity
 
 ![article-img-centered](/img/blog/0014/ghosthands.jpg "Ghosthands")
 
@@ -105,3 +107,243 @@ Here is a list of the events currently supported by the module:
 - YButton
 - YButtonDown
 - YButtonUp
+
+
+# Scene transition in Unity for VR: preserve head-tracking
+
+![article-img-centered](/img/blog/0014/scene_loader.jpg "Image acting as a mask")
+
+Scene transition in Unity can be tricky. If the new scene contains many objects it might take some time to load them all (call [*Awake*](https://docs.unity3d.com/ScriptReference/MonoBehaviour.Awake.html "MonoBehaviour.Awake(\)") on each script and draw all the meshes for the first time). This usually result in a freeze that last until the new scene is loaded (even if you use [*LoadSceneAsync*](https://docs.unity3d.com/ScriptReference/SceneManagement.SceneManager.LoadSceneAsync.html "SceneManager.LoadSceneAsync")). In VR this is particularly bad as users lose head-tracking when the freeze occurs, and this can happen quite quickly when targeting mobile VR (Daydream, GearVR...).
+
+Our Daydream game [Oz Chicken Slayer](https://play.google.com/store/apps/details?id=com.tengio.oz_chicken_slayer "Oz Chicken Slayer on Google Playstore") was removed from Daydream Playstore at some point because of this (see [here](/blog/crossing-realities-to-the-store/#scene-transition "Crossing realities: To the store!") for more information), so I built a system based on fade out and fade in to remove the issue. Here I will focus on Daydream but this can be used for any VR platform (Oculus Rift, HTC Vive, GearVR...).
+
+Let start by creating the *fade* effect, then when we use it for our transitions.
+
+## Fade effect
+
+![article-img-centered](/img/blog/0016/scene_transition.gif "Scene transition with fade out/in")
+
+Before I was using [*OnGUI*](https://docs.unity3d.com/ScriptReference/MonoBehaviour.OnGUI.html "MonoBehaviour.OnGUI(\)") to draw a black rectangle across the whole screen, but with the new Unity 5.6 this doesn't work anymore (as of 31/05/2017). The new technic involve drawing a GUI image right in front of the camera and play with the alpha (transparency) to fade in and out.
+
+For this add a *Canvas* (`Create > UI > Canvas`) inside your Camera *GameObject*, set its *Render Mode* to *World Space*. Then scale it to be a 2 meters by 2 meters square an place it a few centimeters in front of the camera (play on the Z position).
+
+![article-img-centered](/img/blog/0014/fade_screen_camera_ui.jpg "Canvas in Camera")
+
+Inside the *Canvas* add an *Image* (`Create > UI > Image`), scale it to fit entirely inside your canvas and change it's color to whatever color you want for the fade (with alpha to 0).
+
+![article-img-centered](/img/blog/0014/fade_screen_image.jpg "Image acting as a mask")
+
+Then copy-paste the following code into a new C Sharp script (name it FadeScreen):
+
+```csharp
+using System;
+using System.Collections;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace Tengio {
+    [RequireComponent(typeof(Image))]
+    public class FadeScreen : MonoBehaviour {
+
+        [SerializeField]
+        private float duration = 0.2F;
+
+        private Image image;
+        private Coroutine fadeOutCoroutine;
+        private Coroutine fadeInCoroutine;
+
+
+        private void Awake () {
+            image = GetComponent<Image>();
+        }
+
+        public void FadeOut(Action callback = null) {
+            CancelPendingFades();
+            fadeOutCoroutine = StartCoroutine(FadeOutCoroutine(callback));
+        }
+
+        public void FadeIn(Action callback = null) {
+            CancelPendingFades();
+            fadeInCoroutine = StartCoroutine(FadeInCoroutine(callback));
+        }
+
+        private IEnumerator FadeInCoroutine(Action callback) {
+            Color color = image.color;
+            color.a = 1F;
+            float startTime = Time.unscaledTime;
+            while (Time.unscaledTime - startTime <= duration) {
+                color.a -= Time.unscaledDeltaTime / duration;
+                color.a = Mathf.Clamp01(color.a);
+                image.color = color;
+                yield return null;
+            }
+            color.a = 0F;
+            image.color = color;
+            if (callback != null) {
+                callback();
+            }
+        }
+
+        private IEnumerator FadeOutCoroutine(Action callback) {
+            Color color = image.color;
+            color.a = 0F;
+            float startTime = Time.unscaledTime;
+            while (Time.unscaledTime - startTime <= duration) {
+                color.a += Time.unscaledDeltaTime / duration;
+                color.a = Mathf.Clamp01(color.a);
+                image.color = color;
+                yield return null;
+            }
+            color.a = 1F;
+            image.color = color;
+
+            if (callback != null) {
+                callback();
+            }
+        }
+
+        private void CancelPendingFades() {
+            if (fadeOutCoroutine != null) {
+                StopCoroutine(fadeOutCoroutine);
+            }
+            if (fadeInCoroutine != null) {
+                StopCoroutine(fadeInCoroutine);
+            }
+        }
+    }
+}
+```
+
+Drag and drop the script on your *Image* *GameObject*. Now you can call *FadeOut()* and *FadeIn()* at will!
+
+If you want to test it right away add this to the script:
+
+```csharp
+private void Update() {
+    if(Input.GetKeyDown(KeyCode.O)) {
+        FadeOut();
+    }
+    if (Input.GetKeyDown(KeyCode.I)) {
+        FadeIn();
+    }
+}
+```
+
+Now you just have to press O to fade out and I to fade in!
+
+**Note 1:** the `Action callback = null` allows you to register a callback, this way you can run some code when the *Coroutine* is done, his is very handy! If you don't want to use it just ignore it :)
+
+**Note 2:** the `namespace Tengio` part is to make sure that if an other class called "FadeScreen" already exist in your code (either created by yourself or from a third party library) it will not enter in conflict with this one. But then if you create a script that uses this class you have to add `using Tengio;` (like the `using UnityEngine;` you have at the top of every scripts). You can rename it or remove it if you don't want it. See [Unity Manual](https://docs.unity3d.com/Manual/Namespaces.html "Unity Manual Namespaces") for more information.
+
+## Scene loader
+
+And now it's time to put our screen fade to good use!
+
+Copy-paste this in a new *Script*:
+
+```csharp
+using System;
+using System.Collections;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace Tengio {
+    public class SceneLoader : MonoBehaviour {
+
+        [SerializeField]
+        private FadeScreen fadeScreen;
+
+        private bool sceneLoading;
+        private Action callback;
+
+        private void OnEnable() {
+            SceneManager.activeSceneChanged += OnSceneLoaded;
+        }
+
+        private void OnDisable() {
+            SceneManager.activeSceneChanged -= OnSceneLoaded;
+        }
+
+        public void LoadScene(int sceneIndex, Action callback = null, bool noFadeOut = false) {
+            Scene scene = SceneManager.GetSceneByBuildIndex(sceneIndex);
+            if (!scene.IsValid()) {
+                Debug.LogError("Can't load scene: Invalid scene index = " + sceneIndex);
+                return;
+            }
+            LoadScene(scene.name, callback, noFadeOut);
+        }
+
+        public void LoadScene(string sceneName, Action callback = null, bool noFadeOut = false) {
+            if (!sceneLoading) {
+                this.callback = callback;
+                sceneLoading = true;
+                if (noFadeOut) {
+                    SceneManager.LoadScene(sceneName);
+                } else {
+                    fadeScreen.FadeOut(() => {
+                        SceneManager.LoadScene(sceneName);
+                    });
+                }
+            }
+        }
+
+        private void OnSceneLoaded(Scene unused, Scene unused2) {
+            if (sceneLoading) {
+                if (callback != null) {
+                    callback();
+                    callback = null;
+                }
+                StartCoroutine(WaitAndFadeIn());
+            }
+        }
+
+        private IEnumerator WaitAndFadeIn() {
+            // Wait a few frames to avoid freeze (caused by Awake calls?).
+            yield return null;
+            yield return null;
+            yield return null;
+            fadeScreen.FadeIn(() => {
+                sceneLoading = false;
+            });
+        }
+    }
+}
+```
+
+Create a new *GameObject* (I'll call it *SceneLoader*), add the script to it and drag your *GameObject* containing the *FadeScreen* on the right slot.
+
+**Note:** I use [*Lambdas*](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/statements-expressions-operators/lambda-expressions "C# lambdas") to take advantage of the callback of the FadeScreen class. The idea is that when  `fadeScreen.FadeIn()` *Coroutine* is done the code between brackets will be executed:
+
+```csharp
+fadeScreen.FadeIn(() => {
+    sceneLoading = false; // This is executed when FadeIn() coroutine returns.
+});
+```
+
+Now we need to make sure our *SceneLoader* and *FadeScreen* *GameObjects* are not destroyed when changing scene (that would be kinda stupid ^^'). Create a new *Script* called "DontDestroyOnNewScene" and copy-paste this inside:
+
+```csharp
+using UnityEngine;
+
+namespace Tengio {
+    public class DontDestroyOnNewScene : MonoBehaviour {
+
+        public static DontDestroyOnNewScene Instance;
+
+        void Awake() {
+            if (Instance == null) {
+                DontDestroyOnLoad(gameObject);
+                Instance = this;
+            } else if (Instance != this) {
+                Destroy(gameObject);
+            }
+        }
+    }
+}
+```
+
+Create a new empty *GameObject* and add this script to it. Then move your *SceneLoader* and *FadeScreen* *GameObjects* inside it. Your *GameObjects* should now survive when you move from one scene to another!
+
+And that's it! You can call "LoadScene()" with the name or build index of your scene to load it nicely!
+
+![article-img-centered](/img/blog/0014/dancing_banana.gif "Time to dance"!")
