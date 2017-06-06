@@ -14,6 +14,7 @@ tags = [ "Unity", "Cardboard", "VR", "Daydream", "GearVR", "Oculus" ]
 2. [Baby steps into VR](/blog/crossing-realities-baby-steps-into-VR/)
 3. [Ready to Daydream!](/blog/crossing-realities-ready-to-daydream/)
 4. Tips & Tricks
+5. [To the store!](/blog/crossing-realities-to-the-store/)
 
 ## So, what's up here?
 This section is not a tutorial, but it contains useful information and tools I built as I explored VR.
@@ -116,6 +117,8 @@ Here is a list of the events currently supported by the module:
 Scene transition in Unity can be tricky. If the new scene contains many objects it might take some time to load them all (call [*Awake*](https://docs.unity3d.com/ScriptReference/MonoBehaviour.Awake.html "MonoBehaviour.Awake(\)") on each script and draw all the meshes for the first time). This usually result in a freeze that last until the new scene is loaded (even if you use [*LoadSceneAsync*](https://docs.unity3d.com/ScriptReference/SceneManagement.SceneManager.LoadSceneAsync.html "SceneManager.LoadSceneAsync")). In VR this is particularly bad as users lose head-tracking when the freeze occurs, and this can happen quite quickly when targeting mobile VR (Daydream, GearVR...).
 
 Our Daydream game [Oz Chicken Slayer](https://play.google.com/store/apps/details?id=com.tengio.oz_chicken_slayer "Oz Chicken Slayer on Google Playstore") was removed from Daydream Playstore at some point because of this (see [here](/blog/crossing-realities-to-the-store/#scene-transition "Crossing realities: To the store!") for more information), so I built a system based on fade out and fade in to remove the issue. Here I will focus on Daydream but this can be used for any VR platform (Oculus Rift, HTC Vive, GearVR...).
+
+**You can download the demo project on our Github: https://github.com/Tengio/unity-vr-scene-loader-demo**
 
 Let start by creating the *fade* effect, then when we use it for our transitions.
 
@@ -347,3 +350,6 @@ Create a new empty *GameObject* and add this script to it. Then move your *Scene
 And that's it! You can call "LoadScene()" with the name or build index of your scene to load it nicely!
 
 ![article-img-centered](/img/blog/0014/dancing_banana.gif "Time to dance"!")
+
+### Read next
+[Crossing Realities: To the store!](/blog/crossing-realities-to-the-store/)
